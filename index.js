@@ -43,12 +43,12 @@ function retrieveUfValue() {
   }).then(
     response => {
       const html    = htmlParser.parse(response.data);
-      const values  = html.querySelectorAll('#_BcentralIndicadoresViewer_INSTANCE_wphwYhQJUX6t_myTooltipDelegate dl');
-      const ufElem  = values.filter(v => v.rawAttrs.indexOf('Unidad de Fomento') !== -1);
-      const ufHtml  = htmlParser.parse(ufElem[0].innerHTML);
-      const ufValue = ufHtml.querySelector('dd');
+      const values  = html.querySelectorAll('#_BcentralIndicadoresViewer_INSTANCE_wphwYhQJUX6t_myTooltipDelegate div.tooltip-wrap p');
+      const ufElem = values.filter(v => v.parentNode.rawAttrs.indexOf('Unidad de Fomento') !== -1);
+      const ufHtml = htmlParser.parse(ufElem[1].innerHTML);
+      const ufValue = ufHtml.childNodes[0];
 
-      return ufValue.childNodes[1].rawText;
+      return ufValue.rawText.replace(/[$\r\n\s]+/g, '');
     }
   ).catch(err => console.error(err) );
 }
@@ -96,4 +96,3 @@ app.get('/uf', (req, res) => {
 app.listen(8002, '0.0.0.0', () => {
   console.log('Server started on http://localhost:8002');
 })
-
