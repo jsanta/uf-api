@@ -3,7 +3,9 @@ const cors       = require('cors');
 const axios      = require('axios');
 const htmlParser = require('node-html-parser');
 const https      = require('https');
-// const differenceInHours = require('date-fns/differenceInHours');
+const differenceInHours          = require('./utils').differenceInHours;
+const retrieveCurrencyConversion = require('./money-converter').retrieveCurrencyConversion;
+const currencyConversionCache    = require('./money-converter').currencyConversionCache;
 
 const bcentralUrl = 'https://www.bcentral.cl/web/banco-central/inicio';
 
@@ -12,15 +14,6 @@ let dailyUfValue = {
   today: startDate,
   uf: 0
 };
-
-// Ref.: https://github.com/date-fns/date-fns/blob/master/src/differenceInHours/index.js
-function differenceInHours(dateLeft, dateRight) {
-  const MILLISECONDS_IN_HOUR = 3600000;
-  const diffInMilliseconds = dateLeft.getTime() - dateRight.getTime();
-  const diff = diffInMilliseconds / MILLISECONDS_IN_HOUR;
-
-  return diff > 0 ? Math.floor(diff) : Math.ceil(diff);
-}
 
 function retrieveUfValue() {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -66,7 +59,7 @@ app.use(cors({
 app.get('/uf', (req, res) => {
   const reqDate = new Date();
   const dateDiff = differenceInHours(reqDate, startDate);
-  console.log(dateDiff);
+
   if (dailyUfValue.uf === 0 || dateDiff >= 24) {
     console.log('Retrieving UF value');
     startDate = reqDate;
@@ -92,6 +85,48 @@ app.get('/uf', (req, res) => {
     res.status(200).json(dailyUfValue);
   }
 });
+
+app.get('/currency/:origCurrency/:targetCurrency', (req, res) => {
+  const origCurr   = req.params.origCurrency;
+  const targetCurr = req.params.targetCurrency;
+  const reqDate  = new Date();
+  const dateDiff = differenceInHours(reqDate, startDate);
+
+  if (!currencyConversionCache.has(`${origCurr}/${targetCurr}`) || dateDiff >= 24) {
+    console.log(`Retrieving currency conversion for ${origCurr}/${targetCurr}`);
+    startDate = reqDate;
+    retrieveCurrencyConversion(origCurr, targetCurr).then(data => {
+      console.log(`Retrieved currency conversion for ${origCurr}/${targetCurr}`, data);
+      const currencyConversion = {
+        today: startDate,
+        currencyConversion: {
+          from: {
+            currency: data[1],
+            value: parseFloat(data[0])
+          },
+          to: {
+            currency: data[3],
+            value: parseFloat(data[2])
+          },
+          timestamp: data[4]
+        }
+      };
+      currencyConversionCache.set(`${origCurr}/${targetCurr}`, currencyConversion);
+      
+      res.status(200).json(currencyConversion);
+    }).catch(err => {
+      console.error(err);
+      res.status(400).json({
+        status: 400,
+        msg: err
+      });
+    });
+  } else {
+    const response = currencyConversionCache.get(`${origCurr}/${targetCurr}`);
+    console.log(`Using cached currency conversion for ${origCurr}/${targetCurr}: `, response);
+    res.status(200).json(response);
+  }
+})
 
 app.listen(8002, '0.0.0.0', () => {
   console.log('Server started on http://localhost:8002');
